@@ -1,9 +1,9 @@
 from __future__ import division
 from __future__ import print_function
 
+import os
 import random
-import pprint
-from collections import Counter
+
 import numpy as np
 import pandas as pd
 import scipy.stats as stats
@@ -31,13 +31,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.tree import export_graphviz
-from sklearn import tree
-import graphviz
-import seaborn as sns
 import matplotlib.pyplot as plt
-
-
+import seaborn as sns
 
 DOT_DATA = None
 #
@@ -193,7 +188,7 @@ def train_test_split_list(l,train_test_split=0.33):
 
 DCT_COUNT = 0
 
-def run_prediction(df,input_features=None,clf=None,num_iters=10):
+def run_prediction(df,input_features=None,clf=None,num_iters=40):
 
     global FEATURES
     global RUN_CT
@@ -226,6 +221,7 @@ def run_prediction(df,input_features=None,clf=None,num_iters=10):
     df_copy = df.copy()
 
     userIDs = [1]
+
     if 'userID' in df_copy.columns.values:
         userIDs = set(df_copy['userID'].tolist())
 
@@ -237,7 +233,6 @@ def run_prediction(df,input_features=None,clf=None,num_iters=10):
         #     continue
         # print(facet)
         for i in range(num_iters):
-            print(DCT_COUNT, facet)
             # print(i)
             RUN_CT += 1
             res = {'prediction':facet}
@@ -258,6 +253,7 @@ def run_prediction(df,input_features=None,clf=None,num_iters=10):
                 if input_features not in ['dummy1','dummy2'] and facet!='userID' and PERSONALIZED:
                     df = df_copy[df_copy['userID'] == u]
                 while True:
+
 
                     try:
                         (session_nums_train,session_nums_test) = train_test_split_list(list(set(df['session_num'].tolist())),0.8)
@@ -351,9 +347,9 @@ def run_prediction(df,input_features=None,clf=None,num_iters=10):
 
                         scaler.fit(X_train)
                         lr_model.fit(scaler.transform(X_train),y_train)
-                        if clf == 'dct':
-                            DCT_COUNT += 1
-                            export_graphviz(classifier,out_file='/Users/Matt/Desktop/output/out%d.dot'%DCT_COUNT,feature_names=features)
+                        # if clf == 'dct':
+                        #     DCT_COUNT += 1
+                        #     export_graphviz(classifier,out_file='/Users/Matt/Desktop/output/out%d.dot'%DCT_COUNT,feature_names=features)
                         break
                     except ValueError as e:
                         print(e)
@@ -457,15 +453,16 @@ def run_prediction(df,input_features=None,clf=None,num_iters=10):
 
 
 if __name__=='__main__':
-
-
     # LEQ = True
     LEQ = False
+
+    PERSONALIZED = True
 
     #Step 1) Create several data frames
 
     # dataset = pd.read_csv('/Users/Matt/Desktop/sigir_features_nsf.csv')
     dataset = pd.read_csv('/Users/Matt/Desktop/sigir_features_trec.csv')
+    FEATURES = [c for c in list(dataset.columns.values) if not c in PREDICTIONS + METADATA]
 
 
 
@@ -491,19 +488,18 @@ if __name__=='__main__':
     # firstaction_dataset = dataset.copy(deep=True)
     # firstaction_dataset = firstaction_dataset[firstaction_dataset['total_actions_count']==1]
 
-    FEATURES = [c for c in list(dataset.columns.values) if not c in PREDICTIONS + METADATA]
 
-    dataset_allsteps = []
-    for (n,group) in dataset[dataset['start_action'] == False].groupby(['session_num', 'queries_num_session']):
-        dataset_allsteps += [group.tail(1)]
-    dataset_allsteps=pd.concat(dataset_allsteps)
-    ds_allsteps = []
-    for (n, group) in dataset_allsteps.groupby(['session_num']):
-        max_n_queries = group['queries_num_session'].max()
-        group['queries_percent_session'] = group['queries_num_session'] / float(max_n_queries)
-        ds_allsteps += [group]
 
-    dataset_allsteps = pd.concat(ds_allsteps)
+    # dataset_allsteps = []
+    # for (n,group) in dataset[dataset['start_action'] == False].groupby(['session_num', 'queries_num_session']):
+    #     dataset_allsteps += [group.tail(1)]
+    # dataset_allsteps=pd.concat(dataset_allsteps)
+    # ds_allsteps = []
+    # for (n, group) in dataset_allsteps.groupby(['session_num']):
+    #     max_n_queries = group['queries_num_session'].max()
+    #     group['queries_percent_session'] = group['queries_num_session'] / float(max_n_queries)
+    #     ds_allsteps += [group]
+    # dataset_allsteps = pd.concat(ds_allsteps)
 
 
     dataset_tail = []
@@ -523,34 +519,26 @@ if __name__=='__main__':
     # firstaction_dataset_tail = pd.concat(firstaction_dataset_tail)
 
 
-    max_n_queries_session = 15
-
-
-    counts_df = []
-    for (sn, group) in dataset_endsteponly.groupby(['session_num']):
-        tasktype = group['facet_trec2014tasktype'].tolist()[0]
-        product = group['facet_product'].tolist()[0]
-        goal = group['facet_goal'].tolist()[0]
-        counts_df += [{'session_num':sn,'type':tasktype,'product':product,'goal':goal}]
-
-    counts_df = pd.DataFrame(counts_df)
-    print(counts_df)
-    print("TYPE",Counter(counts_df['type'].tolist()))
-    print("PRODUCT", Counter(counts_df['product'].tolist()))
-    print("GOAL", Counter(counts_df['goal'].tolist()))
-    exit()
 
 
 
-    query_count = dict()
-    action_count = dict()
+    # counts_df = []
+    # for (sn, group) in dataset_endsteponly.groupby(['session_num']):
+    #     tasktype = group['facet_trec2014tasktype'].tolist()[0]
+    #     product = group['facet_product'].tolist()[0]
+    #     goal = group['facet_goal'].tolist()[0]
+    #     counts_df += [{'session_num':sn,'type':tasktype,'product':product,'goal':goal}]
+    # counts_df = pd.DataFrame(counts_df)
 
-    for ((sn,qn),group) in dataset_endsteponly.groupby(['session_num','queries_num_session']):
-        query_count[qn] = query_count.get(qn,0) + 1
 
 
-    for ((sn,an),group) in dataset_endsteponly.groupby(['session_num','total_actions_count']):
-        action_count[an] = action_count.get(an,0) + 1
+
+    # query_count = dict()
+    # action_count = dict()
+    # for ((sn,qn),group) in dataset_endsteponly.groupby(['session_num','queries_num_session']):
+    #     query_count[qn] = query_count.get(qn,0) + 1
+    # for ((sn,an),group) in dataset_endsteponly.groupby(['session_num','total_actions_count']):
+    #     action_count[an] = action_count.get(an,0) + 1
 
     # query_count
     # {1: 1021,
@@ -593,51 +581,48 @@ if __name__=='__main__':
     #  21: 3,
     #  22: 2}
 
+    # max_n_queries_session = 15
+    # qnum_range = [i for i in range(max_n_queries_session,0,-1) if query_count[i] >= 40]
+    # anum_range = [i for i in action_count.keys() if action_count[i] >= 40]
+    # dataset_endsteponly_bynqueries = dict()
+    # dataset_endsteponly_bynactions = dict()
 
 
+    # for i in qnum_range:
+    #     if LEQ:
+    #         dataset_endsteponly_bynqueries[i] = []
+    #         df = dataset_tail.copy(deep=True)
+    #         df = df[df['start_action'] == False]
+    #         df = df[df['queries_num_session'] <= i]
+    #         for (n, group) in df.groupby(['session_num']):
+    #             dataset_endsteponly_bynqueries[i] += [group.tail(1)]
+    #         dataset_endsteponly_bynqueries[i] = pd.concat(dataset_endsteponly_bynqueries[i])
+    #     else:
+    #         dataset_endsteponly_bynqueries[i] = []
+    #         df = dataset.copy(deep=True)
+    #         df = df[df['start_action']==False]
+    #         df = df[df['queries_num_session'] == i]
+    #         for (n,group) in df.groupby(['session_num']):
+    #             dataset_endsteponly_bynqueries[i] += [group.tail(1)]
+    #         dataset_endsteponly_bynqueries[i] = pd.concat(dataset_endsteponly_bynqueries[i])
 
-
-    # qnum_range = [i for i in range(1,max_n_queries_session+1) if query_count[i] >=40]
-    qnum_range = [i for i in range(max_n_queries_session,0,-1) if query_count[i] >= 40]
-    anum_range = [i for i in action_count.keys() if action_count[i] >= 40]
-    dataset_endsteponly_bynqueries = dict()
-    dataset_endsteponly_bynactions = dict()
-
-    for i in qnum_range:
-        if LEQ:
-            dataset_endsteponly_bynqueries[i] = []
-            df = dataset_tail.copy(deep=True)
-            df = df[df['start_action'] == False]
-            df = df[df['queries_num_session'] <= i]
-            for (n, group) in df.groupby(['session_num']):
-                dataset_endsteponly_bynqueries[i] += [group.tail(1)]
-            dataset_endsteponly_bynqueries[i] = pd.concat(dataset_endsteponly_bynqueries[i])
-        else:
-            dataset_endsteponly_bynqueries[i] = []
-            df = dataset.copy(deep=True)
-            df = df[df['start_action']==False]
-            df = df[df['queries_num_session'] == i]
-            for (n,group) in df.groupby(['session_num']):
-                dataset_endsteponly_bynqueries[i] += [group.tail(1)]
-            dataset_endsteponly_bynqueries[i] = pd.concat(dataset_endsteponly_bynqueries[i])
-
-    for i in anum_range:
-        if LEQ:
-            dataset_endsteponly_bynactions[i] = []
-            df = dataset_tail.copy(deep=True)
-            df = df[df['start_action'] == False]
-            df = df[df['total_actions_count'] <= i]
-            for (n, group) in df.groupby(['session_num']):
-                dataset_endsteponly_bynactions[i] += [group.tail(1)]
-            dataset_endsteponly_bynactions[i] = pd.concat(dataset_endsteponly_bynactions[i])
-        else:
-            dataset_endsteponly_bynactions[i] = []
-            df = dataset.copy(deep=True)
-            df = df[df['start_action'] == False]
-            df = df[df['total_actions_count'] == i]
-            for (n, group) in df.groupby(['session_num']):
-                dataset_endsteponly_bynactions[i] += [group.tail(1)]
-            dataset_endsteponly_bynactions[i] = pd.concat(dataset_endsteponly_bynactions[i])
+    # for i in anum_range:
+    #     if LEQ:
+    #         dataset_endsteponly_bynactions[i] = []
+    #         df = dataset_tail.copy(deep=True)
+    #         df = df[df['start_action'] == False]
+    #         df = df[df['total_actions_count'] <= i]
+    #         for (n, group) in df.groupby(['session_num']):
+    #             dataset_endsteponly_bynactions[i] += [group.tail(1)]
+    #         dataset_endsteponly_bynactions[i] = pd.concat(dataset_endsteponly_bynactions[i])
+    #     else:
+    #         dataset_endsteponly_bynactions[i] = []
+    #         df = dataset.copy(deep=True)
+    #         df = df[df['start_action'] == False]
+    #         df = df[df['total_actions_count'] == i]
+    #         for (n, group) in df.groupby(['session_num']):
+    #             dataset_endsteponly_bynactions[i] += [group.tail(1)]
+    #         dataset_endsteponly_bynactions[i] = pd.concat(dataset_endsteponly_bynactions[i])
 
 
 
@@ -648,8 +633,9 @@ if __name__=='__main__':
     #     exit()
 
 
-    # sessions_per_user_df = pd.read_csv('../../data/interim/trec2014_sessions_per_user_nonnegativeuserid.csv')
-    # active_users = list(set(sessions_per_user_df[sessions_per_user_df['num_sessions'] >=40]['user_num'].tolist()))
+
+    sessions_per_user_df = pd.read_csv(os.path.dirname(os.path.realpath(__file__))+'/../../data/interim/trec2014_sessions_per_user_nonnegativeuserid.csv')
+    active_users = list(set(sessions_per_user_df[sessions_per_user_df['num_sessions'] >=40]['user_num'].tolist()))
     # print("N USERS",len(list(set(active_users))))
     #
     #
@@ -662,15 +648,17 @@ if __name__=='__main__':
 
 
 
+    dataset_endsteponly_activeusersonly = dataset_endsteponly[dataset_endsteponly['userID'].isin(active_users)]
+
     featurenames_and_featuresets = [
-                                    # ("stratified", ['dummy1'], 'str'),
-                                    # ("mostfrequent_baseline", ['dummy2'], 'mfq'),
-                                    # ("allfeatures_ada", FEATURES, 'ada'),
+                                    ("stratified", ['dummy1'], 'str'),
+                                    ("mostfrequent_baseline", ['dummy2'], 'mfq'),
+                                    ("allfeatures_ada", FEATURES, 'ada'),
                                     # ("allfeatures_knn", FEATURES, 'knn'),
-                                    # ("allfeatures_gnb", FEATURES, 'gnb'),
-                                    # # ("allfeatures_ovr", FEATURES, 'ovr'),
-                                    # # ("allfeatures_ovo", FEATURES, 'ovo'),
-                                    # ("allfeatures_svc", FEATURES, 'svc'),
+                                    ("allfeatures_gnb", FEATURES, 'gnb'),
+                                    # ("allfeatures_ovr", FEATURES, 'ovr'),
+                                    # ("allfeatures_ovo", FEATURES, 'ovo'),
+                                    ("allfeatures_svc", FEATURES, 'svc'),
                                     # ("allfeatures_rfc", FEATURES, 'rfc'),
                                     # ("allfeatures_mlp", FEATURES, 'mlp'),
                                     ("allfeatures_dct", FEATURES, 'dct')
@@ -701,6 +689,7 @@ if __name__=='__main__':
     for c in dataset_tail.columns.values:
         if c not in METADATA and c in ['serps_num_session']:
             dataset_tail = dataset_tail.drop(c,1)
+            dataset_endsteponly_activeusersonly.drop(c,1)
 
 
     # for c in nsf_wholesession.columns.values:
@@ -718,7 +707,7 @@ if __name__=='__main__':
 
 
     dataset_list = [
-        ('trec_allsteps',dataset_allsteps),
+        ('trec_allsteps',dataset_endsteponly_activeusersonly),
         # ('trec_wholesession', dataset_tail),
                     # ('trec_wholesessionmean',wholesessionmean_dataset),
                     # ('trec_wholesessiontotal',wholesessiontotal_dataset),
@@ -741,11 +730,12 @@ if __name__=='__main__':
     prediction_results_all_ci = []
 
     prediction_accuracy_results = dict()
+    prediction_results_dump = []
     for (dfname, df) in dataset_list:
         features_ds = [c for c in list(df.columns.values) if not c in PREDICTIONS + METADATA]
         print("DFNAME", dfname, "NROWS", len(df.index), features_ds)
         # print("DFNAME",dfname,"NROWS",len(df.index),"NQUERIES",max(df['queries_num_session'].tolist()),"NACTIONS",max(df['total_actions_count'].tolist()))
-    # for (dfname,df) in [('trec_firstquerysegment',firstquery_dataset_tail)]:
+        # for (dfname,df) in [('trec_firstquerysegment',firstquery_dataset_tail)]:
         #Get correlation results, output to pivot
         correlation_results = []
         for f in features_ds:
@@ -763,12 +753,24 @@ if __name__=='__main__':
 
         #Get average prediction results, output to pivot
         prediction_results = []
+
+
         for (featuregroupname, featuregroup, clf) in featurenames_and_featuresets:
             if featuregroup != ['dummy1'] and featuregroup != ['dummy2']:
                 featuregroup = features_ds
 
             print(featuregroupname)
-            lr_res = run_prediction(df.copy(), input_features=featuregroup, clf=clf,num_iters=100)
+            lr_res = run_prediction(df.copy(), input_features=featuregroup, clf=clf,num_iters=40)
+            prediction_results_dump += [lr_res]
+
+            clf_rename = clf
+            if clf_rename in ['str', 'mfq']:
+                clf_rename = "base_" + clf_rename
+            prediction_results_dump[-1]['classifier'] = clf_rename
+            prediction_results_dump[-1]['dfname'] = dfname
+            prediction_results_dump[-1]['featuregroupname'] = featuregroupname
+
+
 
             # if clf=='dct':
             #     graph = graphviz.Source(DOT_DATA)
@@ -802,6 +804,7 @@ if __name__=='__main__':
                     prediction_results += [{'classifier': clf_rename, 'prediction': p, 'accuracy': av_res}]
 
 
+
         if ('session_query' in dfname) or ('session_action' in dfname):
             print(list(pd.DataFrame(prediction_results_all).columns.values))
             print("NNNQUERIES",set(pd.DataFrame(prediction_results_all)['queries_num_session'].tolist()))
@@ -813,6 +816,27 @@ if __name__=='__main__':
         else:
             pd.DataFrame(prediction_results).pivot(index='classifier', columns='prediction', values='accuracy').to_csv('/Users/Matt/Desktop/output/%s_prediction.csv'%dfname)
 
+    prediction_results_dump = pd.concat(prediction_results_dump)
+    for (dfname,df) in dataset_list:
+        for p in PREDICTIONS:
+            df_toplot = prediction_results_dump[(prediction_results_dump['dfname'] == dfname) & (prediction_results_dump['prediction'] == p)]
+            print(df_toplot)
+            print(df_toplot.columns.values)
+            plt.ylim(0,1.0)
+            sns.boxplot(x='classifier',y='accuracy',data=df_toplot)
+            if PERSONALIZED:
+                plt.savefig("/Users/Matt/Desktop/classification_output/%s_%s_%s_personalized.png" % (p, dfname,featuregroupname))
+            else:
+                plt.savefig("/Users/Matt/Desktop/classification_output/%s_%s_%s.png" % (p, dfname,featuregroupname))
+            plt.clf()
+        # for (featuregroupname, featuregroup, clf) in featurenames_and_featuresets:
+        #     for p in PREDICTIONS:
+        #         df_toplot = prediction_results_dump[(prediction_results_dump['dfname'] == dfname) & (prediction_results_dump['featuregroupname'] == featuregroupname) & (prediction_results_dump['prediction'] == p)]
+        #         print(df_toplot)
+        #         print(df_toplot.columns.values)
+        #         sns.boxplot(x='classifier',y='accuracy',data=df_toplot)
+        #         plt.savefig("/Users/Matt/Desktop/classification_output/%s_%s_%s.png" % (p, dfname,featuregroupname))
+        #         plt.clf()
 
     print("COMPARE SIGNIFICANCE")
 

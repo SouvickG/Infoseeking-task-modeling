@@ -12,3 +12,23 @@
 .idea/vcs.xml
 
 .idea/workspace.xml
+data/external/trec2014/2017-09-23_facetannotations_annotator1.xlsx
+data/external/trec2014/2017-08-06_facetannotations_annotator2.xlsx
+data/external/trec2014/2017-07-24_facetannotations_annotator2.xlsx
+data/external/trec2014/2017-07-17_facetannotations_annotator1.xlsx
+data/external/trec2014/2017-09-23_facetannotations_annotator1.xlsx
+data/external/trec2014/2017-09-23_facetannotations_annotator1.xlsx
+data/interim/*
+data/processed/*
+data/raw/*
+data/external/trec2014/*
+reports/classification/*
+data/external/trec2014/*
+data/external/trec2014/sessiontrack2014.xml
+data/external/trec2014/session-topic-mapping.txt
+data/external/trec2014/README.txt
+data/external/trec2014/judgments.txt
+reports/EDA/*
+reports/EDA
+reports/FACET EDA/*
+reports/figures/*

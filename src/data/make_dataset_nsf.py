@@ -10,6 +10,7 @@ import numpy as np
 import sys
 import mysql.connector
 sys.path.insert(1, '../utils')
+sys.path.insert(1, '../utils')
 from nltk.corpus import stopwords
 from stop_words import get_stop_words
 
@@ -69,6 +70,8 @@ class NSFLogParser:
     viewmystuff_url = u'http://coagmento.org/fall2015intent/services/viewMyStuff.php?=true'
     queryid_threshold = 10000
 
+
+
     def _set_connection(self,con):
         self.connection = con
 
@@ -78,6 +81,7 @@ class NSFLogParser:
     def __init__(self,output_csv='./output.csv'):
 
         self.output_csv = output_csv
+        self.auxiliary_datasets = None
         self.action_map = {
             ('left-click',): self._left_click,  # CHECK
             ('left-dblclick',): self._left_doubleclick,  # CHECK
@@ -138,6 +142,9 @@ class NSFLogParser:
 
         self.reformulation_types = set(self._sql_query(
             "SELECT reformulationType FROM video_intent_assignments WHERE userID < " + str(self.userID_limit) + " AND reformulationType IS NOT NULL GROUP BY reformulationType")['reformulationType'].tolist())
+
+
+
 
 
         mp = {40: 2, 10: 1, 20: 1, 50: 2, 30: 2}
@@ -315,6 +322,13 @@ class NSFLogParser:
                     current_state['pagedata_segment'][t] = copy.deepcopy(defaultdata)
 
             tabs = previous_state['tabs']
+            for t in tabs:
+                if total_state['pagedata_total'].get(t, None) is None:
+                    total_state['pagedata_total'][t] = copy.deepcopy(defaultdata)
+                if current_state['pagedata_segment'].get(t, None) is None:
+                    current_state['pagedata_segment'][t] = copy.deepcopy(defaultdata)
+
+            tabs = previous_state['tabs']
             tabIndex = previous_state['tabIndex']
             bookmarks_lookup = dict([(b, []) for b in total_state['bookmarks']])
             for (t, i) in zip(tabs, range(len(tabs))):
@@ -458,7 +472,7 @@ class NSFLogParser:
             features += [self._create_feature_vector(current_state, previous_state, total_state)]
             prev_group = group
 
-        return features
+        return pd.DataFrame(features)
 
     @action_states_for_user_task_decorator
     def _process_session_data(self,session_metadata):
@@ -467,7 +481,7 @@ class NSFLogParser:
         task_num = session_metadata['task_num']
         bad_intentions = session_metadata['bad_intentions']
         if bad_intentions:
-            return []
+            return pd.DataFrame([])
         stageID_intent = self.tasknum_to_intentstageid[task_num]
         stageID_task = self.tasknum_to_taskstageid[task_num]
 
@@ -521,6 +535,7 @@ class NSFLogParser:
 
     def _get_task_metadata(self, userID, taskNum):
         task_metadata = dict()
+        postsearch_stages = {1: 20, 2:50}
         user_data = self._sql_query("SELECT * FROM users WHERE userID=%d" % userID)
         questionID = user_data["topicAreaID%d" % taskNum].tolist()[0]
         question_data = self._sql_query("SELECT * FROM questions_study WHERE questionID=%d" % questionID)
@@ -531,6 +546,20 @@ class NSFLogParser:
 
         query_intent_data = self._sql_query(
             "SELECT * FROM video_intent_assignments WHERE userID=%d AND questionID=%d" % (userID, questionID))
+
+        demographic_data = self._sql_query("SELECT * FROM questionnaire_demographic WHERE userID=%d"%userID)
+
+        search_years = demographic_data['search_years'].tolist()[0]
+        search_expertise = demographic_data['search_expertise'].tolist()[0]
+        search_frequency = demographic_data['search_frequency'].tolist()[0]
+        search_journalism = demographic_data['search_journalism'].tolist()[0]
+
+        postsearch_data = self._sql_query("SELECT * FROM questionnaire_postsearch WHERE userID=%d AND stageID=%d" % (userID,postsearch_stages[taskNum]))
+
+        post_successful = postsearch_data['q2_success'].tolist()[0]
+        post_difficult = postsearch_data['q1_difficult'].tolist()[0]
+        post_rushed = postsearch_data['q3_time'].tolist()[0]
+        post_comprehend = postsearch_data['q4_comp'].tolist()[0]
 
         task_topic = question_data['topic'].tolist()[0]
         task_type = question_data['category'].tolist()[0]
@@ -543,10 +572,25 @@ class NSFLogParser:
 
         num_queries_total = len(query_intent_data.index)
 
+
+
         to_return = {'startTimestamp': question_starttime, 'endTimestamp': question_endtime, 'userID': userID,
                      'questionID': questionID, 'task_topic': task_topic, 'task_type': task_type,
                      'task_topic': task_topic, 'facet_product': facet_product, 'facet_level': facet_level,
-                     'facet_goal': facet_goal, 'facet_named': facet_named, 'num_queries_total': num_queries_total}
+                     'facet_goal': facet_goal, 'facet_named': facet_named, 'num_queries_total': num_queries_total,
+                     'search_years': search_years,
+                     'search_expertise': search_expertise,
+                     'search_frequency': search_frequency,
+                     'search_journalism': search_journalism,
+                     'post_successful': post_successful,
+                     'post_difficult': post_difficult,
+                     'post_rushed': post_rushed,
+                     'post_comprehend': post_comprehend
+
+                     }
+
+
+
         to_return.update(pretask)
         to_return.update(posttask)
 
@@ -568,11 +612,11 @@ class NSFLogParser:
                 total_features += [self._process_session_data(session_metadata)]
                 #TODO: Checkpoint
 
-        pd.concat(total_features)
+        self.full_data_frame = pd.concat(total_features)
 
-        total_features.to_csv(self.output_csv)
+        self.full_data_frame.to_csv(self.output_csv)
 
-        total_features[
+        self.full_data_frame[
             ['userID', 'questionID', 'queryID', 'pq_error', 'pq_current_action_count', 'pq_current_action_type', 'tabs',
              'number_tabs', 'current_tab']].to_csv('/Users/Matt/Desktop/tabs_debug.csv')
         self.valid = False
@@ -1017,6 +1061,15 @@ class NSFLogParser:
         f_vec['facet_level'] = total_state['facet_level']
         f_vec['facet_goal'] = total_state['facet_goal']
         f_vec['facet_named'] = total_state['facet_named']
+        f_vec['search_years'] = total_state['search_years']
+        f_vec['search_expertise'] = total_state['search_expertise']
+        f_vec['search_frequency'] = total_state['search_frequency']
+        f_vec['search_journalism'] = total_state['search_journalism']
+        f_vec['post_successful'] = total_state['post_successful']
+        f_vec['post_difficult'] = total_state['post_difficult']
+        f_vec['post_rushed'] = total_state['post_rushed']
+        f_vec['post_comprehend'] = total_state['post_comprehend']
+
 
         f_vec['localTimestamp'] = total_state['localTimestamp']
 
@@ -1101,12 +1154,22 @@ class NSFLogParser:
                             [values[valuetype] for (p, values) in related_pages.iteritems()])
                         f_vec["%s_total_%s_%s" % (valuetype, pagetype, seg_session)] = np.sum(
                             [values[valuetype] for (p, values) in related_pages.iteritems()])
-                    print("SAVING:", "%s_mean_%s_%s" % (valuetype, pagetype, seg_session))
+                    # print("SAVING:", "%s_mean_%s_%s" % (valuetype, pagetype, seg_session))
 
-        f_vec['pages_num_segment'] = len(set([url for url in current_state['pagedata_segment'].keys() if
-                                              url not in ['about:blank', 'about:newtab', '']]))
-        f_vec['pages_num_session'] = len(set(
-            [url for url in total_state['pagedata_total'].keys() if url not in ['about:blank', 'about:newtab', '']]))
+        segment_urls = set([url for url in current_state['pagedata_segment'].keys() if
+                            url not in ['about:blank', 'about:newtab', '']])
+        f_vec['pages_num_segment'] = sum(
+            [current_state['pagedata_segment'][url]['views_total'] > 1 for url in segment_urls])
+
+        session_urls = set(
+            [url for url in total_state['pagedata_total'].keys() if url not in ['about:blank', 'about:newtab', '']])
+        f_vec['pages_num_session'] = sum(
+            [total_state['pagedata_total'][url]['views_total'] > 1 for url in session_urls])
+        # f_vec['pages_num_segment'] = len(set([url for url in current_state['pagedata_segment'].keys() if
+        #                                       url not in ['about:blank', 'about:newtab', '']]))
+        # f_vec['pages_num_session'] = len(set(
+        #     [url for url in total_state['pagedata_total'].keys() if url not in ['about:blank', 'about:newtab', '']]))
+
         f_vec['pages_per_query'] = f_vec['pages_num_session'] / float(total_state['num_queries'])
         f_vec['sources_num_segment'] = len(set(
             [urlparse(url).netloc for url in current_state['pagedata_segment'].keys() if
@@ -1118,8 +1181,17 @@ class NSFLogParser:
         # TODO: total time elapsed?
 
         # TODO!!!!
-        
-        
+
+
+        f_vec['intenttotal_current_id'] = abs(current_state['id_start'])+abs(current_state['id_more'])
+        f_vec['intenttotal_current_learn'] = abs(current_state['learn_domain'])+abs(current_state['learn_database'])
+        f_vec['intenttotal_current_findaccessobtain'] = abs(current_state['find_known'])+abs(current_state['find_specific'])+abs(current_state['find_common'])+ \
+                                                            abs(current_state['find_without'])+abs(current_state['access_item'])+ \
+                                                                abs(current_state['access_common'])+abs(current_state['access_area'])+ \
+                                                                    abs(current_state['obtain_specific']) + abs(current_state['obtain_part'])+abs(current_state['obtain_whole'])
+        f_vec['intenttotal_current_keep'] = abs(current_state['keep_link'])
+        f_vec['intenttotal_current_evaluate'] = abs(current_state['evaluate_correctness'])+abs(current_state['evaluate_specificity'])+abs(current_state['evaluate_usefulness'])+abs(current_state['evaluate_best'])+abs(current_state['evaluate_duplication'])
+
         for intention in self.intention_columns:
             f_vec['intent_current_' + intention] = current_state[intention]
             f_vec['intent_prev_' + intention] = current_state['previntent_' + intention]
@@ -1180,13 +1252,38 @@ class NSFLogParser:
         total_state['pagedata_total'] = dict()
         current_state['pagedata_segment'] = dict()
 
+    def slice_frame(self):
+        pass
+
+    def slice_frame(self,override=False):
+        if self.auxiliary_datasets is not None and not override:
+            print("Auxiliary datasets already created!")
+            return self.auxiliary_datasets
+        self.auxiliary_datasets = dict()
+        dataset_byquery = []
+        for (n,group) in self.full_data_frame.groupby(['queryID']):
+            dataset_byquery += [group.tail(1)]
+            print(group.tail(1))
+
+        self.auxiliary_datasets['byquery'] = pd.concat(dataset_byquery)
+        self.auxiliary_datasets['byquery']['facet_goal_val_amorphous'] = (self.auxiliary_datasets['byquery']['facet_goal']=='Amorphous')*1
+        self.auxiliary_datasets['byquery']['topic_globalwarming'] = (self.auxiliary_datasets['byquery'][
+                                                                             'task_topic'] != 'Coelacanths') * 1
+        self.auxiliary_datasets['byquery']['facet_product_val_intellectual'] = (self.auxiliary_datasets['byquery'][
+                                                                             'facet_product'] == 'Intellectual') * 1
+        return self.auxiliary_datasets
+
 
 
 
 
 if __name__=='__main__':
-    logger = NSFLogParser(output_csv='/Users/Matt/Desktop/sigir_features_nsf.csv')
+    logger = NSFLogParser(output_csv='/Users/Matt/Desktop/features_nsf_alldata.csv')
     logger.process_log()
+    subframes = logger.slice_frame()
+
+    print(subframes['byquery'])
+    subframes['byquery'].to_csv('/Users/Matt/Desktop/features_nsf_byquery.csv')
     exit()
 #
 # Query Segment Data Structure
